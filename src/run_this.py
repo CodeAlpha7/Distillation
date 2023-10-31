@@ -4,13 +4,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 import time
+import csv
 
 #####################  hyper parameters  ####################
 CHECK_EPISODE = 4
-LEARNING_MAX_EPISODE = 10
+LEARNING_MAX_EPISODE = 50
 MAX_EP_STEPS = 3000
 TEXT_RENDER = False
-SCREEN_RENDER = True
+SCREEN_RENDER = False
 CHANGE = False
 SLEEP_TIME = 0.1
 
@@ -28,6 +29,7 @@ def exploration (a, r_dim, b_dim, r_var, b_var):
 ###############################  training  ####################################
 
 if __name__ == "__main__":
+    start_time = time.time()
     env = Env()
     s_dim, r_dim, b_dim, o_dim, r_bound, b_bound, task_inf, limit, location = env.get_inf()
     ddpg = DDPG(s_dim, r_dim, b_dim, o_dim, r_bound, b_bound)
@@ -41,6 +43,8 @@ if __name__ == "__main__":
     episode = 0
     var_counter = 0
     epoch_inf = []
+    transitions = []
+    prev_state = []
     while var_counter < LEARNING_MAX_EPISODE:
         # initialize
         s = env.reset()
@@ -64,6 +68,8 @@ if __name__ == "__main__":
             # store the transition parameter
             s_, r = env.ddpg_step_forward(a, r_dim, b_dim)
             ddpg.store_transition(s, a, r / 10, s_)
+            prev_state = s
+            s = s_
             # learn
             if ddpg.pointer == ddpg.memory_capacity:
                 print("start learning")
@@ -73,67 +79,50 @@ if __name__ == "__main__":
                     r_var *= .99999
                     b_var *= .99999
             # replace the state
-            s = s_
+            #s = s_
             # sum up the reward
             ep_reward[episode] += r
-            # in the end of the episode
-            if j == MAX_EP_STEPS - 1:
-                var_reward.append(ep_reward[episode])
-                r_v.append(r_var)
-                b_v.append(b_var)
-                print('Episode:%3d' % episode, ' Reward: %5d' % ep_reward[episode], '###  r_var: %.2f ' % r_var,'b_var: %.2f ' % b_var, )
-                string = 'Episode:%3d' % episode + ' Reward: %5d' % ep_reward[episode] + '###  r_var: %.2f ' % r_var + 'b_var: %.2f ' % b_var
-                epoch_inf.append(string)
-                # variation change
-                if var_counter >= CHECK_EPISODE and np.mean(var_reward[-CHECK_EPISODE:]) >= max_rewards:
-                    CHANGE = True
-                    var_counter = 0
-                    max_rewards = np.mean(var_reward[-CHECK_EPISODE:])
-                    var_reward = []
-                else:
-                    CHANGE = False
-                    var_counter += 1
-
+            
         # end the episode
         if SCREEN_RENDER:
             env.canvas.tk.destroy()
+        status = ddpg.get_status()
+        # Print the transitions
+        # for transition in status['transitions']:
+        #     print("State:", transition['state'])
+        #     print("Action:", transition['action'])
+        #     print("Reward:", transition['reward'])
+        #     print("Next State:", transition['next_state'])
+        #     print("------------------------")
+                    # Store the transition
+        transition = {
+            'episode':episode + 1,
+            'offload':prev_state[r_dim + b_dim:o_dim].tolist(),
+            'bandwidth':prev_state[r_dim:r_dim + b_dim].tolist(),
+            'action': a.tolist(),
+            'reward': float(r),
+            'next_bandwidth': s_[r_dim:r_dim + b_dim].tolist(),
+            'next_offload': s_[r_dim + b_dim:o_dim].tolist()
+        }
+        transitions.append(transition)
+        var_counter += 1
         episode += 1
+        print(episode)
+    
+    # Save transitions to a CSV file
+    csv_file_path = 'transitions.csv'
+    with open(csv_file_path, mode='w', newline='') as file:
+        writer = csv.writer(file)
+        # Write the header row
+        writer.writerow(transitions[0].keys())
+        # Write the data rows
+        for transition in transitions:
+            writer.writerow(transition.values())
+    print(f"Transitions saved")
+    end_time = time.time()
+    # Calculate the duration in seconds
+    duration = end_time - start_time
+    # Print the duration
+    print("Runtime: {:.2f} minutes".format(duration / 60))
 
-    # make directory
-    dir_name = 'output/' + 'ddpg_'+str(r_dim) + 'u' + str(int(o_dim / r_dim)) + 'e' + str(limit) + 'l' + location
-    if (os.path.isdir(dir_name)):
-        os.rmdir(dir_name)
-    os.makedirs(dir_name)
-    # plot the reward
-    fig_reward = plt.figure()
-    plt.plot([i+1 for i in range(episode)], ep_reward)
-    plt.xlabel("episode")
-    plt.ylabel("rewards")
-    fig_reward.savefig(dir_name + '/rewards.png')
-    # plot the variance
-    fig_variance = plt.figure()
-    plt.plot([i + 1 for i in range(episode)], r_v, b_v)
-    plt.xlabel("episode")
-    plt.ylabel("variance")
-    fig_variance.savefig(dir_name + '/variance.png')
-    # write the record
-    f = open(dir_name + '/record.txt', 'a')
-    f.write('time(s):' + str(MAX_EP_STEPS) + '\n\n')
-    f.write('user_number:' + str(r_dim) + '\n\n')
-    f.write('edge_number:' + str(int(o_dim / r_dim)) + '\n\n')
-    f.write('limit:' + str(limit) + '\n\n')
-    f.write('task information:' + '\n')
-    f.write(task_inf + '\n\n')
-    for i in range(episode):
-        f.write(epoch_inf[i] + '\n')
-    # mean
-    print("the mean of the rewards in the last", LEARNING_MAX_EPISODE, " epochs:", str(np.mean(ep_reward[-LEARNING_MAX_EPISODE:])))
-    f.write("the mean of the rewards:" + str(np.mean(ep_reward[-LEARNING_MAX_EPISODE:])) + '\n\n')
-    # standard deviation
-    print("the standard deviation of the rewards:", str(np.std(ep_reward[-LEARNING_MAX_EPISODE:])))
-    f.write("the standard deviation of the rewards:" + str(np.std(ep_reward[-LEARNING_MAX_EPISODE:])) + '\n\n')
-    # range
-    print("the range of the rewards:", str(max(ep_reward[-LEARNING_MAX_EPISODE:]) - min(ep_reward[-LEARNING_MAX_EPISODE:])))
-    f.write("the range of the rewards:" + str(max(ep_reward[-LEARNING_MAX_EPISODE:]) - min(ep_reward[-LEARNING_MAX_EPISODE:])) + '\n\n')
-    f.close()
 

@@ -7,14 +7,14 @@ from render import Demo
 
 #####################  hyper parameters  ####################
 LOCATION = "KAIST"
-USER_NUM = 10
-EDGE_NUM = 10
+USER_NUM = 2
+EDGE_NUM = 2
 LIMIT = 4
-LEARNING_MAX_EPISODE = 20
+LEARNING_MAX_EPISODE = 15
 MAX_EP_STEPS = 3000
 TXT_NUM = 92
 TEXT_RENDER = False
-SCREEN_RENDER = True
+SCREEN_RENDER = False
 r_bound = 1e9 * 0.063
 b_bound = 1e9
 

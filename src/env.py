@@ -7,8 +7,8 @@ from render import Demo
 
 #####################  hyper parameters  ####################
 LOCATION = "KAIST"
-USER_NUM = 10
-EDGE_NUM = 10
+USER_NUM = 2
+EDGE_NUM = 2
 LIMIT = 4
 MAX_EP_STEPS = 3000
 TXT_NUM = 92

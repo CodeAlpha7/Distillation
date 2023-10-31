@@ -1,14 +1,13 @@
 import tensorflow.compat.v1 as tf
 tf.disable_v2_behavior()
 import numpy as np
-import time
 
 #####################  hyper parameters  ####################
 LR_A = 0.0001    # learning rate for actor
 LR_C = 0.0002    # learning rate for critic
 GAMMA = 0.9     # reward discount
 TAU = 0.01      # soft replacement
-BATCH_SIZE = 32
+BATCH_SIZE = 4096
 OUTPUT_GRAPH = False
 
 ###############################  DDPG  ####################################
@@ -80,10 +79,12 @@ class DDPG(object):
         self.sess.run(self.ctrain, {self.S: bs, self.a: ba, self.R: br, self.S_: bs_})
 
     def store_transition(self, s, a, r, s_):
-        transition = np.hstack((s, a, [r], s_))
-        index = self.pointer % self.memory_capacity  # replace the old memory with new memory
+        transition = np.concatenate((s, a, np.expand_dims(r, axis=0), s_), axis=0)
+        index = self.pointer % self.memory_capacity
         self.memory[index, :] = transition
         self.pointer += 1
+
+    
 
     def _build_a(self, s, reuse=None, custom_getter=None):
         trainable = True if reuse is None else False
@@ -139,3 +140,23 @@ class DDPG(object):
             net_3 = tf.layers.dense(net_2, n_l, activation=tf.nn.relu, trainable=trainable)
             net_4 = tf.layers.dense(net_3, n_l, activation=tf.nn.relu, trainable=trainable)
             return tf.layers.dense(net_4, 1, activation=tf.nn.relu, trainable=trainable)  # Q(s,a)
+    #def get_status(self):
+    #    status = {}
+    #    status['memory_size'] = self.memory
+    #    return status
+    def get_status(self):
+        status = {}
+        status['memory_size'] = self.pointer  # Provide the size of the memory
+        transitions = []
+        for i in range(min(self.pointer, self.memory_capacity)):
+            transition = {
+                'state': self.memory[i, :self.s_dim],
+                'action': self.memory[i, self.s_dim: self.s_dim + self.a_dim],
+                'reward': self.memory[i, -self.s_dim - 1],
+                'next_state': self.memory[i, -self.s_dim:]
+            }
+            transitions.append(transition)
+        status['transitions'] = transitions
+        return status
+
+    
